@@ -8,6 +8,7 @@ Repositório dedicado ao primeiro trabalho do segundo semestre de 2018 da discip
 - **Organização de Tarefas**: [Trello - 1º Trabalho de OAC 2018/2](https://trello.com/b/mAGOm0vG)
 
 - **Editor LaTex**: [Overleaf](https://www.overleaf.com/) ou [ShareLaTex](https://pt.sharelatex.com/)
+    - [Projeto no Overleaf](https://v2.overleaf.com/3295856762ryqjfpzpmwjn)
 
 ### Sobre o GitHub:
 
