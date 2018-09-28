@@ -46,9 +46,8 @@ LOOP_TELA:
 	lb $t0, 0($t5)
 	lb $t1, 1($t5)
 	lb $t2, 2($t5)
-	sll $t0, $t0, 24 # deslocamento para ocupar posicao do azul
-	sll $t1, $t1, 16 # deslocamento para ocupar posicao do verde
-	sll $t2, $t2, 8 # deslocamento para ocupar posicao do vermelho
+	sll $t1, $t1, 8 # deslocamento para ocupar posicao do verde
+	sll $t2, $t2, 16 # deslocamento para ocupar posicao do vermelho
 	li $t3, 0 # garante que nao tera lixo em t5
 	or $t3, $t3, $t0
 	or $t3, $t3, $t1
