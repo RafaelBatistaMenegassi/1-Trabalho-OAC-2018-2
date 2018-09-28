@@ -22,10 +22,10 @@ INICIO:
 	syscall			# retorna em $v0 o descritor do arquivo
 	move $t0,$v0		# passa o descritor em $t0
 # Le o arquivos para a memoria VGA
-	addi $sp, $sp, -57 # decrementa o ponteiro para a pilha, para receber a imagem
+	addi $sp, $sp, -786486 # decrementa o ponteiro para a pilha para receber a imagem, numero refere-se a qtd de bytes do arq 786432 + 54 do cabecalho = 786486
 	move $a0,$t0		# $a0 recebe o descritor salvo em s0
 	la $a1, ($sp)			# le a imagem na pilha
-	li $a2,57		# quantidade de bytes, 2Elevado18 - produto de 512x512 vezes 32 bits para um pixel
+	li $a2,786486
 	li $v0,14		# syscall de read file
 	syscall			# retorna em $v0 o numero de bytes lidos
 	move $s0, $v0
@@ -34,46 +34,27 @@ INICIO:
 	li $v0, 1	#printar inteiro
 	add $a0, $t0, $zero
 	syscall
-#convencao para esse trecho: t0 armazena final da pilha, t1 armazena endereco a escrever na tela 
+#convencao para esse trecho: t5 armazena final da pilha, t4 armazena endereco a escrever na tela 
 #t2, t3 e t4 armazenam cores e $t5 armazena a word a printar na tela
-	la $t0, 0x7FFFEFFC # endereço do fim da pilha
-	la $t1, 0x10010000 # endereco da tela bitmapDisplay
+	la $t5, 0x7FFFEFFC # endereço do fim da pilha
+	la $t4, 0x10008000 # endereco da tela bitmapDisplay
 	addi $sp, $sp, 54 # pula cabecalho da imagem de 54 bytes
 LOOP_TELA:
-	beq $t0, $sp, LE_PROX #sinal de que chegou ao fim da pilha
-	lb $t2, 0($sp)	#carrega em t2 azul
-	lb $t3, 1($sp)	#carrega em t2 verde
-	lb $t4, 2($sp)	#carrega em t2 vermelho
-	addi $sp, $sp, 3 #avança ponteiro da pilha
-	sll $t2, $t2, 24 # deslocamento para ocupar posicao do azul
-	sll $t3, $t3, 16 # deslocamento para ocupar posicao do verde
-	sll $t4, $t4, 8 # deslocamento para ocupar posicao do vermelho
-	li $t5, 0 # garante que nao tera lixo em t5
-	or $t5, $t5, $t2
-	or $t5, $t5, $t3
-	or $t5, $t5, $t4
-	sw $t5, 0($t0) # printa na tela bitmap
-	addi $t1, $t1, 4 #avança ponteiro da tela
-	j LOOP_TELA
-LE_PROX:
-	addi $sp, $sp, -3
-	move $a0,$s0		# $a0 recebe o descritor salvo em s0
-	la $a1, ($sp)			# le a imagem na pilha
-	li $a2,3		# quantidade de bytes, 2Elevado18 - produto de 512x512 vezes 32 bits para um pixel
-	li $v0,14		# syscall de read file
-	syscall			# retorna em $v0 o numero de bytes lidos
-	#testar valor do arquivo lido
-	move $s0, $v0
-	li $v0, 1	#printar inteiro
-	add $a0, $t0, $zero
-	syscall
-	li $v0, 11
-	li $a0, '\n'
-	syscall
-	###
-	li $t7, 1		#registrado usado para verificacao
-	slt $t6, $s0, $t7	#se o numero de bits lidos e menor que 1, entao encerra o loop
-	beq $t6, 1, FIM
+	beq $t5, $sp, FIM #sinal de que chegou ao fim da pilha
+	addi $t5, $t5, -3 # como arquivo bitmap eh escrito de "tras para frente", fazemos a leitura partindo do final para o inicio
+	#lemos byte e byte do endereco de memoria, para agrupa-los nas cores corretas no formato mars (32 bits para um pixel) e carregar na tela
+	lb $t0, 0($t5)
+	lb $t1, 1($t5)
+	lb $t2, 2($t5)
+	sll $t0, $t0, 24 # deslocamento para ocupar posicao do azul
+	sll $t1, $t1, 16 # deslocamento para ocupar posicao do verde
+	sll $t2, $t2, 8 # deslocamento para ocupar posicao do vermelho
+	li $t3, 0 # garante que nao tera lixo em t5
+	or $t3, $t3, $t0
+	or $t3, $t3, $t1
+	or $t3, $t3, $t2
+	sw $t3, 0($t4) # printa na tela bitmap
+	addi $t4, $t4, 4 #avança ponteiro da tela
 	j LOOP_TELA
 FIM:
 	#Fecha o arquivo

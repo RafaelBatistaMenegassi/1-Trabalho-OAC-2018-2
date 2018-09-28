@@ -37,21 +37,22 @@ INICIO:
 #convencao para esse trecho: t5 armazena final da pilha, t4 armazena endereco a escrever na tela 
 #t2, t3 e t4 armazenam cores e $t5 armazena a word a printar na tela
 	la $t5, 0x7FFFEFFC # endereço do fim da pilha
-	la $t4, 0x10010000 # endereco da tela bitmapDisplay
+	la $t4, 0x10008000 # endereco da tela bitmapDisplay
 	addi $sp, $sp, 54 # pula cabecalho da imagem de 54 bytes
 LOOP_TELA:
 	beq $t5, $sp, FIM #sinal de que chegou ao fim da pilha
-	lb $t0, 0($sp)	#carrega em t2 azul
-	lb $t1, 1($sp)	#carrega em t3 verde
-	lb $t2, 2($sp)	#carrega em t4 vermelho
-	addi $sp, $sp, 3 #avança ponteiro da pilha
+	addi $t5, $t5, -3 # como arquivo bitmap eh escrito de "tras para frente", fazemos a leitura partindo do final para o inicio
+	#lemos byte e byte do endereco de memoria, para agrupa-los nas cores corretas no formato mars (32 bits para um pixel) e carregar na tela
+	lb $t0, 0($t5)
+	lb $t1, 1($t5)
+	lb $t2, 2($t5)
 	sll $t0, $t0, 24 # deslocamento para ocupar posicao do azul
 	sll $t1, $t1, 16 # deslocamento para ocupar posicao do verde
 	sll $t2, $t2, 8 # deslocamento para ocupar posicao do vermelho
 	li $t3, 0 # garante que nao tera lixo em t5
 	or $t3, $t3, $t0
 	or $t3, $t3, $t1
-	#or $t3, $t3, $t2
+	or $t3, $t3, $t2
 	sw $t3, 0($t4) # printa na tela bitmap
 	addi $t4, $t4, 4 #avança ponteiro da tela
 	j LOOP_TELA

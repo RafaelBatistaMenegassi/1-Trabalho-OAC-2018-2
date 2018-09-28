@@ -11,8 +11,8 @@ IMAGEM:		.asciiz "lena.bmp"  #string de nome do arquivo que sera lido
 .text
 INICIO:
 # Preenche a tela de vermelho
-	la $t1,0x10010000	# endereco inicial da Memoria VGA
-	la $t2,0x10090000	# endereco final 
+	la $t1,0x10008000	# endereco inicial da Memoria VGA
+	la $t2,0x10108000	# endereco final 
 	la $t3,0x000000FF	# cor azul
 LOOP:
  	beq $t1,$t2,FIM	# Se for o ultimo endereco entco sai do loop
