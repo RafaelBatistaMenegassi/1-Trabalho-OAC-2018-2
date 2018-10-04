@@ -41,7 +41,7 @@ FIM_PILHA:	.word	0x7FFFEFFC
 	li $v0, 14				# syscall de read file
 	syscall					# retorna em $v0 o numero de bytes lidos
 	move $s7, $v0			# salva o numero de bytes lidos em $s7 para fins de verificacao
-	addi $sp, $sp, 54 	# pula cabecalho da imagem de 54 bytes
+	addi $sp, $sp, 54 		# pula cabecalho da imagem de 54 bytes
 	# Fecha o arquivo
 	move $a0,$s7		# $a0 recebe o descritor
 	li $v0,16			# syscall de close file
@@ -94,10 +94,13 @@ SEL_FIM:
 OP1_TELA:
 	move $s1, $ra		# salva endereco de retorno em s1
 	jal PRINTA_PRETO	#funcao para primeiramente printar toda a tela de preto novamente
-	# convencao para esse trecho: t5 armazena final da pilha, t4 armazena endereco da tela que avanca sequencialmente
-	# t0, t1 e t2 armazenam cores e $t3 armazena a word a printar na tela
+	# convencao para esse trecho: $t5 armazena final da pilha, $t4 armazena endereco da tela que avanca sequencialmente
+	# $t0, $t1 e $t2 armazenam cores e $t3 armazena a word a printar na tela
+	# $t6 armazena numero de inversao do endereco a printar na tela, de forma que a img nao saia espelhada
+	# $t7 armazena o endereco a imprimir na tela, sendo a soma de $t6 e $t4
 	lw $t5, FIM_PILHA($zero)
 	la $t4, ($gp) 		# endereco da tela bitmapDisplay -> 0x10008000
+	li $t6, 2044		#tamanho de uma linha da tela -4
 
 LOOP_TELA:
 	beq $t5, $sp, VOLTA_MENU_TELA # sinal de que chegou ao fim da pilha
@@ -112,8 +115,15 @@ LOOP_TELA:
 	or $t3, $t3, $t0
 	or $t3, $t3, $t1
 	or $t3, $t3, $t2
-	sw $t3, 0($t4)   # printa na tela bitmap
+	add $t7, $t6, $t4 # corrige a posicao a se imprimir na tela
+	sw $t3, ($t7)   # printa na tela bitmap
 	addi $t4, $t4, 4 # avança ponteiro da tela
+	beq $t6, -2044, VOLTA_T6
+	addi $t6, $t6, -8 # para manter a posicao correta
+	j LOOP_TELA
+
+VOLTA_T6:
+	li $t6, 2044
 	j LOOP_TELA
 
 VOLTA_MENU_TELA:
