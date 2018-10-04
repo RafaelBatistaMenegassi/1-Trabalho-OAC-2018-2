@@ -13,7 +13,11 @@
 .data
 BUF:		.space 1500000 		# Buffer util para a leitura da imagem (que ultrapassa a secao .data em 753718 bytes)
 IMAGEM:		.asciiz "lena.bmp"  # string de nome do arquivo que sera lido, imagem 512x512 pixels
-MENU:		.asciiz "----- Menu -----\n\nOpcao 1 - Imprimir Imagem na tela\nOpcao 2 - Efeito de Borramento\nOpcao 3 - Efeito de Extracao de Bordas\nOpcao 4 - Binarizacao por limiar\nOpcao 5 - Finalizar programa\n\nSelecione uma opcao: "
+PATH:		.asciiz "lena.bmp"			# path da imagem a ser digitada por usuario
+BUF_PATH:	.space 500		# Buffer util para alocar um ocasional grande PATH
+INV_PATH:	.asciiz "\nO endereço digitado nao pode ser encontrado. Tente novamente!\n\n"
+INICIO:		.asciiz "----- Tratamento de Imagem BMP -----\n\nPara iniciar, favor digitar o endereço do arquivo: "
+MENU:		.asciiz "\n----- Menu -----\n\nOpcao 1 - Imprimir Imagem na tela\nOpcao 2 - Efeito de Borramento\nOpcao 3 - Efeito de Extracao de Bordas\nOpcao 4 - Binarizacao por limiar\nOpcao 5 - Finalizar programa\n\nSelecione uma opcao: "
 TELA:		.asciiz "\n\n--- Leitura de Imagem no BitMap Display ---\n"
 BORRA:		.asciiz "\n\n--- Efeito de Borramento ---\n"
 BORDAS:		.asciiz "\n\n--- Efeito de Extracao de Bordas ---\n"
@@ -21,18 +25,53 @@ BINARIO:	.asciiz "\n\n--- Efeito de Binarizacao por Limiar ---\n"
 VER_MENU:	.asciiz "\n\nERRO: favor digitar uma das opcoes numericas indicadas\n"
 FIM_PILHA:	.word	0x7FFFEFFC
 
+# ---------------------------------------------------------------------------
+
 .text
-	#convencoes para programa: $s0 armazena a opcao digitada, $s1 armazena o endereco de retorno ao menu, 
-	#$s7 armazena o numero de bytes lidos para fins de verificacao
+
+.globl __MAIN
+
+__PRE_PROC:
+	# Convencoes para programa: 
+	#  -> $s0 armazena a opcao digitada apos chamada de menu;
+	#  -> $s1 armazena o endereco de retorno ao menu;
+	#  -> $s7 armazena o numero de bytes da imagem lidos para fins de verificacao;
+
+	# requisicao de path do arquivo
+	la $a0, INICIO
+	li $v0, 4
+	syscall
+
+	# leitura de opcao digitada
+	#la $a0, PATH
+	#la $a1, 500
+	#li $v0, 8
+	#syscall
+
+	# teste PATH
+	# la $a0, PATH
+	#li $v0, 4
+	#syscall
 	
 	#Abre arquivo imagem
-	la $a0, IMAGEM	# string endereco/nome do arquivo
+	la $a0, PATH	# string endereco/nome do arquivo
 	li $a1, 0		# 0 para flag de leitura
 	li $a2, 0		# modo ignorado
 	li $v0, 13		# syscall de open file
 	syscall			# retorna em $v0 o descritor do arquivo
 	move $t0, $v0	# passa o descritor em $t0
+
+	slt $t1, $t0, $zero
+	beq $t1, $zero, ABRE_IMG # teste quanto a se o arquivo pode ser realmente aberto
+
+	# falha ao tentar abrir arquivo
+	la $a0, INV_PATH
+	li $v0, 4
+	syscall 
 	
+	j __PRE_PROC
+	
+ABRE_IMG:
 	#Le o arquivo para a memoria VGA
 	addi $sp, $sp, -786486	# decrementa o ponteiro para a pilha para receber a imagem, numero refere-se a qtd de bytes do arq 786432 + 54 do cabecalho = 786486
 	move $a0, $t0			# $a0 recebe o descritor salvo em s0
@@ -47,7 +86,7 @@ FIM_PILHA:	.word	0x7FFFEFFC
 	li $v0,16			# syscall de close file
 	syscall				# retorna se foi tudo Ok
 
-.globl __MAIN
+# ---------------------------------------------------------------------------
 
 __MAIN:
 	# menu
@@ -189,8 +228,10 @@ VOLTA_FUNC:
 	jr $ra
 
 # ---------------------------------------------------------------------------
+
 OP5_FIM:
 	# encerra o programa
 	li $v0, 10
 	syscall
+
 # ---------------------------------------------------------------------------
