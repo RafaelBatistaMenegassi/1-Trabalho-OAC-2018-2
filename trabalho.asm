@@ -82,7 +82,7 @@ ABRE_IMG:
 	#convencoes para programa: $s0 armazena a opcao digitada, $s1 armazena o endereco de retorno ao menu, 
 	#$s2 armazena final da pilha, $s3 armazena o começo da imagem em tons de cinza e $s4 o inicio da imagem borrada, quando gerada
 	#Le o arquivo para a memoria VGA
-	li $sp, 0x7FFFEFFC
+	lw $sp, FIM_PILHA($zero)	# nao e necessario para a primeira execucao, mas importante para as demais para zerar a pilha
 	li $s0, 0
 	li $s1, 0
 	li $s2, 0
@@ -116,19 +116,19 @@ LOOP_CINZA:
 	addi $t5, $t5, -3 		# como arquivo bitmap eh escrito de "tras para frente", fazemos a leitura partindo do final para o inicio
 	# lemos byte e byte do endereco de memoria, para a partir disso calcular o tom de cinza equivalente 
 	lb $t0, 0($t5)
-	mul $t0, $t0, 11		# convencao de atribuir peso 0,11 ao tom azul na escala de cinza
+	sll $t0, $t0, 2	
 	lb $t1, 1($t5)
-	mul $t1, $t1, 59		# convencao de atribuir peso 0,59 ao tom verde na escala de cinza
+	sll $t1, $t1, 2	
 	lb $t2, 2($t5)
-	mul $t2, $t2, 30		# convencao de atribuir peso 0,3 ao tom vermelho na escala de cinza
+	sll $t2, $t2, 2	
 	li $t3, 0     	 		# limpa t3
 	add $t3, $t0, $t1
 	add $t3, $t3, $t2
-	li $t4, 100
+	li $t4, 12
 	div $t3, $t4			# apos $t3 ser o somatorio das multiplicacoes, divide por 100 e obterm o byte em escala de cinza
 	mfhi $t4				# resto da divisao
 	mflo $t3				# quociente da divisao
-	slti $a0, $t4, 51		# trecho para arredondar divisao por 100
+	slti $a0, $t4, 6		# trecho para arredondar divisao por 100
 	beq $a0, 0, ARREDONDA_CINZA
 RETORNA_CINZA:
 	move $t0, $t3
@@ -137,9 +137,8 @@ RETORNA_CINZA:
 	li $t3, 0     	 		# limpa t3
 	sll $t1, $t1, 8  		# deslocamento para ocupar posicao do verde
 	sll $t2, $t2, 16 		# deslocamento para ocupar posicao do vermelho
-	or $t3, $t3, $t0
-	or $t3, $t3, $t1
-	or $t3, $t3, $t2
+	add $t3, $t0, $t1
+	add $t3, $t3, $t2
 	addi $sp, $sp, -4 		# avança ponteiro da pilha
 	sw $t3, ($sp)   		# adiciona pilha
 	j LOOP_CINZA
@@ -165,6 +164,7 @@ __MAIN:
 	beq $s0, 4, SEL_BINARIO
 	beq $s0, 5, SEL_NOVA_IMG
 	beq $s0, 6, SEL_FIM
+	beq $s0, 7, SEL_CINZA
 	
 	# mensagem em caso de usuario digitar uma opcao fora das indicadas
 	la $a0, VER_MENU
@@ -200,6 +200,10 @@ SEL_NOVA_IMG:
 	
 SEL_FIM:
 	j OP6_FIM
+
+SEL_CINZA:
+	jal OP7_CINZA
+	j __MAIN
 	
 # ---------------------------------------------------------------------------
 OP1_TELA:
@@ -225,9 +229,8 @@ LOOP_TELA:
 	sll $t1, $t1, 8  		# deslocamento para ocupar posicao do verde
 	sll $t2, $t2, 16 		# deslocamento para ocupar posicao do vermelho
 	li $t3, 0     	 		# garante que nao tera lixo em $t3
-	or $t3, $t3, $t0
-	or $t3, $t3, $t1
-	or $t3, $t3, $t2
+	add $t3, $t0, $t1
+	add $t3, $t3, $t2
 	add $t7, $t6, $t4 		# corrige a posicao a se imprimir na tela
 	sw $t3, ($t7)   		# printa na tela bitmap
 	addi $t4, $t4, 4 		# avança ponteiro da tela
@@ -253,7 +256,39 @@ OP2_BORRA:
 	move $s1, $ra			# salva endereco de retorno em s1
 	jal PRINTA_PRETO		# funcao para primeiramente printar toda a tela de preto novamente
 	
-	# ...
+	# convencao para esse trecho: 
+	# $t4 armazena endereco da tela que avanca sequencialmente
+	# $t5 armazena inicialmente final da pilha e eh decrementado em direcao a $s3, que eh o final da imagem colorida
+	# $t0, $t1 e $t2 armazenam cores e $t3 armazena a word a printar na tela
+	# $t6 armazena numero de inversao do endereco a printar na tela, de forma que a img nao saia espelhada
+	# $t7 armazena o endereco a imprimir na tela, sendo a soma de $t6 e $t4
+	move $t5, $s2
+	la $t4, ($gp) 			# endereco da tela bitmapDisplay -> 0x10008000
+	li $t6, 2044			# tamanho de uma linha da tela -4
+
+LOOP_TELA_BORRA:
+	beq $t5, $s3, VOLTA_MENU_BORRA # sinal de que chegou ao fim da pilha
+	addi $t5, $t5, -3 	# como arquivo bitmap eh escrito de "tras para frente", fazemos a leitura partindo do final para o inicio
+	# lemos byte e byte do endereco de memoria, para agrupa-los nas cores corretas no formato mars (32 bits para um pixel) e carregar na tela
+	lb $t0, 0($t5)
+	lb $t1, 1($t5)
+	lb $t2, 2($t5)
+	sll $t1, $t1, 8  		# deslocamento para ocupar posicao do verde
+	sll $t2, $t2, 16 		# deslocamento para ocupar posicao do vermelho
+	li $t3, 0     	 		# garante que nao tera lixo em $t3
+	or $t3, $t3, $t0
+	or $t3, $t3, $t1
+	or $t3, $t3, $t2
+	add $t7, $t6, $t4 		# corrige a posicao a se imprimir na tela
+	sw $t3, ($t7)   		# printa na tela bitmap
+	addi $t4, $t4, 4 		# avança ponteiro da tela
+	beq $t6, -2044, VOLTA_T6
+	addi $t6, $t6, -8 		# para manter a posicao correta
+	j LOOP_TELA
+
+VOLTA_T6_BORRA:
+	li $t6, 2044
+	j LOOP_TELA
 
 VOLTA_MENU_BORRA:
 	# printa msg de leitura da imagem na tela
@@ -352,3 +387,36 @@ OP6_FIM:
 	syscall
 
 # ---------------------------------------------------------------------------
+OP7_CINZA:
+	move $s1, $ra			# salva endereco de retorno em s1
+	jal PRINTA_PRETO		# funcao para primeiramente printar toda a tela de preto novamente
+	# convencao para esse trecho: 
+	# $t4 armazena endereco da tela que avanca sequencialmente
+	# $t5 armazena inicialmente final do trecho da pilha relativo a imagem cinza e eh decrementado em direcao a $sp, que eh o final da imagem colorida
+	# $t3 armazena a word a printar na tela
+	# $t6 armazena numero de inversao do endereco a printar na tela, de forma que a img nao saia espelhada
+	# $t7 armazena o endereco a imprimir na tela, sendo a soma de $t6 e $t4
+	# $a0 armazena o numero indicado pelo usuario
+	move $t5, $s3
+	la $t4, ($gp) 			# endereco da tela bitmapDisplay -> 0x10008000
+	li $t6, 2044			# tamanho de uma linha da tela -4
+
+LOOP_TELA_CINZA:
+	beq $t5, $sp, VOLTA_MENU_CINZA # sinal de que chegou ao fim da pilha
+	addi $t5, $t5, -4 		# como arquivo bitmap eh escrito de "tras para frente", fazemos a leitura partindo do final para o inicio
+	lw $t3, 0($t5)     	 	# le um byte que identifica a cor cinza em t3
+	add $t7, $t6, $t4 		# corrige a posicao a se imprimir na tela
+	sw $t3, ($t7)   		# printa na tela bitmap
+	addi $t4, $t4, 4 		# avança ponteiro da tela
+	beq $t6, -2044, VOLTA_T6_CINZA
+	addi $t6, $t6, -8 		# para manter a posicao correta
+	j LOOP_TELA_CINZA
+	
+VOLTA_T6_CINZA:
+	li $t6, 2044
+	j LOOP_TELA_CINZA
+
+VOLTA_MENU_CINZA:
+	# recupera ra de s1 e retorna para a rotina anterior
+	move $ra, $s1
+	jr $ra
