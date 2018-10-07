@@ -19,6 +19,7 @@ BORRA:		.asciiz "\n\n--- Efeito de Borramento ---\n"
 BORDAS:		.asciiz "\n\n--- Efeito de Extracao de Bordas ---\n"
 BINARIO:	.asciiz "\n\n--- Efeito de Binarizacao por Limiar ---\n"
 VER_MENU:	.asciiz "\n\nERRO: favor digitar uma das opcoes numericas indicadas\n"
+BIN_NUM:	.asciiz "\nDigite um numero entre 0 e 255 para ser o limiar. Sugere-se um numero nao superior a 70\n"
 FIM_PILHA:	.word	0x7FFFEFFC
 
 .text
@@ -92,8 +93,6 @@ RETORNA_CINZA:
 ARREDONDA_CINZA:
 	addi $t3, $t3, 1
 	j RETORNA_CINZA
-	
-.globl __MAIN
 
 __MAIN:
 	# menu
@@ -130,6 +129,12 @@ SEL_BORDAS:
 	j __MAIN
 	
 SEL_BINARIO:
+	la $a0, BIN_NUM
+	li $v0, 4
+	syscall
+	li $v0, 5
+	syscall
+	move $a0, $v0
 	jal OP4_BINARIO
 	j __MAIN
 	
@@ -226,6 +231,7 @@ OP4_BINARIO:
 	# $t3 armazena a word a printar na tela
 	# $t6 armazena numero de inversao do endereco a printar na tela, de forma que a img nao saia espelhada
 	# $t7 armazena o endereco a imprimir na tela, sendo a soma de $t6 e $t4
+	# $a0 armazena o numero indicado pelo usuario
 	move $t5, $s3
 	la $t4, ($gp) 			# endereco da tela bitmapDisplay -> 0x10008000
 	li $t6, 2044			#tamanho de uma linha da tela -4
@@ -234,7 +240,7 @@ LOOP_TELA_BINARIO:
 	beq $t5, $sp, VOLTA_MENU_BINARIO # sinal de que chegou ao fim da pilha
 	addi $t5, $t5, -4 		# como arquivo bitmap eh escrito de "tras para frente", fazemos a leitura partindo do final para o inicio
 	lb $t3, 1($t5)     	 	# le um byte que identifica a cor cinza em t3
-	slti $t0, $t3, 45		# 45 estabelecido como faixa de limiar para binarizacao
+	slt $t0, $t3, $a0		# 45 estabelecido como faixa de limiar para binarizacao
 	beq $t0, 0, ARREDONDA_CIMA_BINARIO
 	li $t3, 0x00FFFFFF				# caso $t3 seja menor que limiar, forca para 0x00FFFFFF, ou seja cor branca
 VOLTA_BINARIO:
