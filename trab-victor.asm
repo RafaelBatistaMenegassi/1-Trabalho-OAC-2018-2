@@ -23,6 +23,9 @@ BORDAS:		.asciiz "\n\n--- Efeito de Extracao de Bordas ---\n"
 BINARIO:	.asciiz "\n\n--- Efeito de Binarizacao por Limiar ---\n"
 VER_MENU:	.asciiz "\n\nERRO: favor digitar uma das opcoes numericas indicadas\n"
 BIN_NUM:	.asciiz "\nDigite um numero entre 0 e 255 para ser o limiar.\n"
+BOR_NUM:	.asciiz "\nDigite um numero, 3 ou 5 de representacao da mascara a ser utilizada.\n"
+BLUR_3:		.byte	1,2,1,2,4,2,1,2,1 #mask to gaussian blur the image
+PILHA_BLUR:	.word	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 FIM_PILHA:	.word	0x7FFFEFFC
 
 # ---------------------------------------------------------------------------
@@ -178,6 +181,12 @@ SEL_TELA:
 	j __MAIN
 	
 SEL_BORRA:
+	la $a0, BOR_NUM
+	li $v0, 4
+	syscall
+	li $v0, 5
+	syscall
+	move $a2, $v0
 	jal OP2_BORRA
 	j __MAIN
 	
@@ -255,40 +264,85 @@ VOLTA_MENU_TELA:
 OP2_BORRA:
 	move $s1, $ra			# salva endereco de retorno em s1
 	jal PRINTA_PRETO		# funcao para primeiramente printar toda a tela de preto novamente
-	
 	# convencao para esse trecho: 
 	# $t4 armazena endereco da tela que avanca sequencialmente
 	# $t5 armazena inicialmente final da pilha e eh decrementado em direcao a $s3, que eh o final da imagem colorida
 	# $t0, $t1 e $t2 armazenam cores e $t3 armazena a word a printar na tela
 	# $t6 armazena numero de inversao do endereco a printar na tela, de forma que a img nao saia espelhada
 	# $t7 armazena o endereco a imprimir na tela, sendo a soma de $t6 e $t4
+	# $a0 eh a posicao no vetor da pilha_blur e $a1 eh a posicao no vetor da matriz blur_3
+	# $a2 eh o numero de mascara de borramento, compreendido entre 3 e 5
+	# $a3 eh o valor a ser adicionado a $t5
 	move $t5, $s2
 	la $t4, ($gp) 			# endereco da tela bitmapDisplay -> 0x10008000
 	li $t6, 2044			# tamanho de uma linha da tela -4
-
-LOOP_TELA_BORRA:
+	li $a0, 0				# posicao no vetor da PILHA_BLUR
+	li $a1, 0				# posicao no vetor da BLUR_3
+VER_BORRA:
 	beq $t5, $s3, VOLTA_MENU_BORRA # sinal de que chegou ao fim da pilha
-	addi $t5, $t5, -3 	# como arquivo bitmap eh escrito de "tras para frente", fazemos a leitura partindo do final para o inicio
-	# lemos byte e byte do endereco de memoria, para agrupa-los nas cores corretas no formato mars (32 bits para um pixel) e carregar na tela
+	li $a3, 1533			# valor de uma linha de 512 pixels por 3 bytes cada pixel, menos um pixel
+	addi $t5, $t5, -3	 	# como arquivo bitmap eh escrito de "tras para frente", fazemos a leitura partindo do final para o inicio
+	li $t7, 1536			# para ficar no tamanho exato de uma linha
+	div $t4, $t7
+	mflo $t8
+	beq $t8, 0, BORDA_ESQ_BORRA		# significa que estamos na borda esquerda da tela
+	beq $t8, 2044, BORDA_DIR_BORRA		# significa que estamos na borda esquerda da tela
+	j NAO_BORDA_BORRA
+BORDA_ESQ_BORRA:
 	lb $t0, 0($t5)
 	lb $t1, 1($t5)
 	lb $t2, 2($t5)
+BORDA_DIR_BORRA:
+	lb $t0, 0($t5)
+	lb $t1, 1($t5)
+	lb $t2, 2($t5)
+NAO_BORDA_BORRA:
+	# lemos byte e byte do endereco de memoria, para agrupa-los nas cores corretas no formato mars (32 bits para um pixel) e carregar na tela
+	add $t9, $a3, $t5
+	lb $t0, 0($t9)
+	lb $t7, BLUR_3($a1)
+	mul $t0, $t0, $t7
+	lb $t1, 1($t9)
+	mul $t1, $t1, $t7
+	lb $t2, 2($t9)
+	mul $t2, $t2, $t7
 	sll $t1, $t1, 8  		# deslocamento para ocupar posicao do verde
 	sll $t2, $t2, 16 		# deslocamento para ocupar posicao do vermelho
 	li $t3, 0     	 		# garante que nao tera lixo em $t3
-	or $t3, $t3, $t0
-	or $t3, $t3, $t1
-	or $t3, $t3, $t2
+	add $t3, $t1, $t0
+	add $t3, $t3, $t2
+	sw $t3, PILHA_BLUR($a0)
+	addi $a1, $a1, 1
+	addi $a0, $a0, 4
+	addi $a3, $a3, 3
+	li $t8, 1536
+	div $a3, $t8
+	mflo $t8
+	abs $t8, $t8
+	beq $t8, 6, PROX_LINHA_BORRA
+	j NAO_BORDA_BORRA
+PROX_LINHA_BORRA:
+	li $t9, 0
+	beq $a0, 36, PIXEL_BORRA
+	addi $a3, $a3, -1545
+	j NAO_BORDA_BORRA
+PIXEL_BORRA:
+	beq $a0, $zero, IMPRIME_BORRA
+	sw $t8, PILHA_BLUR($a0)
+	add $t9, $t9, $t8
+	addi $a0, $a0, -4
+IMPRIME_BORRA:
+	move $t3, $t9
 	add $t7, $t6, $t4 		# corrige a posicao a se imprimir na tela
 	sw $t3, ($t7)   		# printa na tela bitmap
 	addi $t4, $t4, 4 		# avança ponteiro da tela
-	beq $t6, -2044, VOLTA_T6
+	beq $t6, -2044, VOLTA_T6_BORRA
 	addi $t6, $t6, -8 		# para manter a posicao correta
-	j LOOP_TELA
+	j VER_BORRA
 
 VOLTA_T6_BORRA:
 	li $t6, 2044
-	j LOOP_TELA
+	j IMPRIME_BORRA
 
 VOLTA_MENU_BORRA:
 	# printa msg de leitura da imagem na tela
