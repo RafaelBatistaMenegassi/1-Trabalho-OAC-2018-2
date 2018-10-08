@@ -25,7 +25,7 @@ VER_MENU:	.asciiz "\n\nERRO: favor digitar uma das opcoes numericas indicadas\n"
 BIN_NUM:	.asciiz "\nDigite um numero entre 0 e 255 para ser o limiar.\n"
 BOR_NUM:	.asciiz "\nDigite um numero, 3 ou 5 de representacao da mascara a ser utilizada.\n"
 BLUR_3:		.byte	1,2,1,2,4,2,1,2,1 #mask to gaussian blur the image
-PILHA_BLUR:	.word	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+PILHA_BLUR:	.word	0,0,0,0,0,0,0,0,0
 FIM_PILHA:	.word	0x7FFFEFFC
 
 # ---------------------------------------------------------------------------
@@ -276,38 +276,189 @@ OP2_BORRA:
 	move $t5, $s2
 	la $t4, ($gp) 			# endereco da tela bitmapDisplay -> 0x10008000
 	li $t6, 2044			# tamanho de uma linha da tela -4
-	li $a0, 0				# posicao no vetor da PILHA_BLUR
-	li $a1, 0				# posicao no vetor da BLUR_3
 VER_BORRA:
 	beq $t5, $s3, VOLTA_MENU_BORRA # sinal de que chegou ao fim da pilha
-	li $a3, 1533			# valor de uma linha de 512 pixels por 3 bytes cada pixel, menos um pixel
+	li $a0, 0				# posicao no vetor da PILHA_BLUR
+	li $a1, 0				# posicao no vetor da BLUR_3
 	addi $t5, $t5, -3	 	# como arquivo bitmap eh escrito de "tras para frente", fazemos a leitura partindo do final para o inicio
-	li $t7, 1536			# para ficar no tamanho exato de uma linha
+	li $t7, 2048			# para ficar no tamanho exato de uma linha
 	div $t4, $t7
 	mflo $t8
-	beq $t8, 0, BORDA_ESQ_BORRA		# significa que estamos na borda esquerda da tela
-	beq $t8, 2044, BORDA_DIR_BORRA		# significa que estamos na borda esquerda da tela
+	beq $t8, 0, BORDA_DIR_BORRA 		# significa que estamos na borda direita da tela
+	beq $t8, 2044, BORDA_ESQ_BORRA		# significa que estamos na borda esquerda da tela
+	sub $t8, $t4, $gp
+	addi $gp, $gp, 2048
+	slt $t9, $t8, $gp
+	addi $gp, $gp, -2048		
+	beq $t9, 1, PRIM_LINHA_BORRA
+	li $t9, 0xFF800				# 1.046.528(512colunas X 4 bytes X 511linhas), 0xFF800
+	add $gp, $gp, $t9
+	slt $t9, $t8, $gp
+	sub $gp, $gp, $t9
+	beq $t9, $zero, ULT_LINHA_BORRA
 	j NAO_BORDA_BORRA
+
 BORDA_ESQ_BORRA:
-	lb $t0, 0($t5)
-	lb $t1, 1($t5)
-	lb $t2, 2($t5)
-BORDA_DIR_BORRA:
-	lb $t0, 0($t5)
-	lb $t1, 1($t5)
-	lb $t2, 2($t5)
-NAO_BORDA_BORRA:
-	# lemos byte e byte do endereco de memoria, para agrupa-los nas cores corretas no formato mars (32 bits para um pixel) e carregar na tela
+	addi $gp, $gp, 2048
+	slt $t9, $t8, $gp
+	addi $gp, $gp, -2048		
+	beq $t9, 1, CIMA_ESQ_BORRA	
+	li $t9, 0xFF800				# 1.046.528(512colunas X 4 bytes X 511linhas), 0xFF800
+	add $gp, $gp, $t9
+	slt $t9, $t8, $gp
+	sub $gp, $gp, $t9
+	beq $t9, $zero, BAIXO_ESQ_BORRA
+	j NAO_BORDA_BORRA
+BORDA_ESQ_BORRA1:
+	li $a3, 1533			# valor de uma linha de 512 pixels por 3 bytes cada pixel, menos um pixel
 	add $t9, $a3, $t5
 	lb $t0, 0($t9)
 	lb $t7, BLUR_3($a1)
 	mul $t0, $t0, $t7
 	lb $t1, 1($t9)
-	mul $t1, $t1, $t7
-	lb $t2, 2($t9)
-	mul $t2, $t2, $t7
 	sll $t1, $t1, 8  		# deslocamento para ocupar posicao do verde
+	mul $t1 $t1, $t7
+	lb $t2, 2($t9)
 	sll $t2, $t2, 16 		# deslocamento para ocupar posicao do vermelho
+	mul $t2, $t2, $t7
+	li $t3, 0     	 		# garante que nao tera lixo em $t3
+	add $t3, $t1, $t0
+	add $t3, $t3, $t2
+	sw $t3, PILHA_BLUR($a0)
+	addi $a1, $a1, 1
+	addi $a0, $a0, 4
+	addi $a3, $a3, 3
+	li $t8, 1536
+	div $a3, $t8
+	mflo $t8
+	abs $t8, $t8
+	beq $t8, 6, ESQ_PROX_LINHA_BORRA
+	j BORDA_ESQ_BORRA1
+ESQ_PROX_LINHA_BORRA:
+	li $t9, 0
+	beq $a0, 20, ESQ_PIXEL_BORRA
+	addi $a3, $a3, -1545
+	j BORDA_ESQ_BORRA1
+ESQ_PIXEL_BORRA:
+	beq $a0, $zero, IMPRIME_BORRA
+	sw $t8, PILHA_BLUR($a0)
+	add $t9, $t9, $t8
+	addi $a0, $a0, -4
+	j ESQ_PIXEL_BORRA
+	
+CIMA_ESQ_BORRA:
+
+	j NAO_BORDA_BORRA
+BAIXO_ESQ_BORRA:
+
+	j NAO_BORDA_BORRA
+BORDA_DIR_BORRA:
+	addi $gp, $gp, 2048
+	slt $t9, $t8, $gp
+	addi $gp, $gp, -2048		
+	beq $t9, 1, CIMA_DIR_BORRA	
+	li $t9, 0xFF800				# 1.046.528(512colunas X 4 bytes X 511linhas), 0xFF800
+	add $gp, $gp, $t9
+	slt $t9, $t8, $gp
+	sub $gp, $gp, $t9
+	beq $t9, $zero, BAIXO_DIR_BORRA
+
+	j NAO_BORDA_BORRA
+CIMA_DIR_BORRA:
+
+	j NAO_BORDA_BORRA
+BAIXO_DIR_BORRA:
+
+	j NAO_BORDA_BORRA
+
+PRIM_LINHA_BORRA:
+	li $a3, -3
+	li $a1, 4
+	add $t9, $a3, $t5
+	lb $t0, 0($t9)
+	lb $t7, BLUR_3($a1)
+	mul $t0, $t0, $t7
+	lb $t1, 1($t9)
+	sll $t1, $t1, 8  		# deslocamento para ocupar posicao do verde
+	mul $t1 $t1, $t7
+	lb $t2, 2($t9)
+	sll $t2, $t2, 16 		# deslocamento para ocupar posicao do vermelho
+	mul $t2, $t2, $t7
+	li $t3, 0     	 		# garante que nao tera lixo em $t3
+	add $t3, $t1, $t0
+	add $t3, $t3, $t2
+	sw $t3, PILHA_BLUR($a0)
+	addi $a1, $a1, 1
+	addi $a0, $a0, 4
+	addi $a3, $a3, 3
+	li $t8, 1536
+	div $a3, $t8
+	mflo $t8
+	abs $t8, $t8
+	beq $t8, 6, PRIM_PROX_LINHA_BORRA
+	j PRIM_LINHA_BORRA
+PRIM_PROX_LINHA_BORRA:
+	li $t9, 0
+	beq $a0, 20, PRIM_PIXEL_BORRA
+	addi $a3, $a3, -1545
+	j PRIM_LINHA_BORRA
+PRIM_PIXEL_BORRA:
+	beq $a0, $zero, IMPRIME_BORRA
+	sw $t8, PILHA_BLUR($a0)
+	add $t9, $t9, $t8
+	addi $a0, $a0, -4
+	j PRIM_PIXEL_BORRA
+
+ULT_LINHA_BORRA:
+	li $a3, 1533			# valor de uma linha de 512 pixels por 3 bytes cada pixel, menos um pixel
+	add $t9, $a3, $t5
+	lb $t0, 0($t9)
+	lb $t7, BLUR_3($a1)
+	mul $t0, $t0, $t7
+	lb $t1, 1($t9)
+	sll $t1, $t1, 8  		# deslocamento para ocupar posicao do verde
+	mul $t1 $t1, $t7
+	lb $t2, 2($t9)
+	sll $t2, $t2, 16 		# deslocamento para ocupar posicao do vermelho
+	mul $t2, $t2, $t7
+	li $t3, 0     	 		# garante que nao tera lixo em $t3
+	add $t3, $t1, $t0
+	add $t3, $t3, $t2
+	sw $t3, PILHA_BLUR($a0)
+	addi $a1, $a1, 1
+	addi $a0, $a0, 4
+	addi $a3, $a3, 3
+	li $t8, 1536
+	div $a3, $t8
+	mflo $t8
+	abs $t8, $t8
+	beq $t8, 6, ULT_PROX_LINHA_BORRA
+	j ULT_LINHA_BORRA
+ULT_PROX_LINHA_BORRA:
+	li $t9, 0
+	beq $a0, 20, ULT_PIXEL_BORRA
+	addi $a3, $a3, -1545
+	j ULT_LINHA_BORRA
+ULT_PIXEL_BORRA:
+	beq $a0, $zero, IMPRIME_BORRA
+	sw $t8, PILHA_BLUR($a0)
+	add $t9, $t9, $t8
+	addi $a0, $a0, -4
+	j ULT_PIXEL_BORRA
+
+NAO_BORDA_BORRA:
+	# lemos byte e byte do endereco de memoria, para agrupa-los nas cores corretas no formato mars (32 bits para um pixel) e carregar na tela
+	li $a3, 1533			# valor de uma linha de 512 pixels por 3 bytes cada pixel, menos um pixel
+	add $t9, $a3, $t5
+	lb $t0, 0($t9)
+	lb $t7, BLUR_3($a1)
+	mul $t0, $t0, $t7
+	lb $t1, 1($t9)
+	sll $t1, $t1, 8  		# deslocamento para ocupar posicao do verde
+	mul $t1 $t1, $t7
+	lb $t2, 2($t9)
+	sll $t2, $t2, 16 		# deslocamento para ocupar posicao do vermelho
+	mul $t2, $t2, $t7
 	li $t3, 0     	 		# garante que nao tera lixo em $t3
 	add $t3, $t1, $t0
 	add $t3, $t3, $t2
@@ -323,7 +474,7 @@ NAO_BORDA_BORRA:
 	j NAO_BORDA_BORRA
 PROX_LINHA_BORRA:
 	li $t9, 0
-	beq $a0, 36, PIXEL_BORRA
+	beq $a0, 32, PIXEL_BORRA
 	addi $a3, $a3, -1545
 	j NAO_BORDA_BORRA
 PIXEL_BORRA:
@@ -331,6 +482,8 @@ PIXEL_BORRA:
 	sw $t8, PILHA_BLUR($a0)
 	add $t9, $t9, $t8
 	addi $a0, $a0, -4
+	j PIXEL_BORRA
+
 IMPRIME_BORRA:
 	move $t3, $t9
 	add $t7, $t6, $t4 		# corrige a posicao a se imprimir na tela
@@ -339,10 +492,9 @@ IMPRIME_BORRA:
 	beq $t6, -2044, VOLTA_T6_BORRA
 	addi $t6, $t6, -8 		# para manter a posicao correta
 	j VER_BORRA
-
 VOLTA_T6_BORRA:
 	li $t6, 2044
-	j IMPRIME_BORRA
+	j VER_BORRA
 
 VOLTA_MENU_BORRA:
 	# printa msg de leitura da imagem na tela
